@@ -367,7 +367,7 @@ async def create_vending(interaction: discord.Interaction):
     embed.add_field(name="ガチャ ¥1,200", value="`好きなガチャをコイン分引く +BOXは対象外`", inline=False)
     embed.add_field(name="高品質コイン ¥1,700〜¥7,200", value="`指定ツムで回数分割コイン獲得（履歴に最大枚数のみ表示）`", inline=False)
     
-    embed.set_footer(text="© 2026 GodMart All Rights Reserved.")
+    embed.set_footer(text="©Shiroko!shop.")
 
     view = ShopMainView()
     await interaction.channel.send(embed=embed, view=view)
