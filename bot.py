@@ -23,7 +23,7 @@ def keep_alive():
     t.start()
 
 # === 設定値（直埋め済み） ===
-TOKEN = "MTU0NjM4OTQ3NTMzMTE0NTc2OA.GX2bYx.v_W-ZS6C8d0FGfWGEdFUrKmMGe8Eaiw5_kEDPA"
+TOKEN = os.getenv("TOKEN")
 ADMIN_LOG_CHANNEL_ID = 1500206540517540031  # 管理者用ログチャンネルのID
 GUILD_ID = 1500129771441492219              # 自分のDiscordサーバーID
 
