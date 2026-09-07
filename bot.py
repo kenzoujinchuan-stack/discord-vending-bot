@@ -200,45 +200,45 @@ class ShopMainView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🪙 コイン購入 (¥500)", style=discord.ButtonStyle.primary, custom_id="shop_coin_btn")
+    @discord.ui.button(label="🪙 コイン購入 (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_coin_btn")
     async def buy_coin(self, interaction: discord.Interaction, button: discord.ui.Button):
         fields = [
             ("希望コイン数", "例: 1,000,000", False),
             ("PayPayリンク", "https://pay.paypay.ne.jp/...", True)
         ]
-        await interaction.response.send_modal(DynamicCustomerPayModal("コイン", 500, fields))
+        await interaction.response.send_modal(DynamicCustomerPayModal("コイン", 700, fields))
 
-    @discord.ui.button(label="🎯 スコア購入 (¥500)", style=discord.ButtonStyle.primary, custom_id="shop_score_btn")
+    @discord.ui.button(label="🎯 スコア購入 (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_score_btn")
     async def buy_score(self, interaction: discord.Interaction, button: discord.ui.Button):
         fields = [
             ("指定ツム・スコア", "例: バンビで1億点", False),
             ("PayPayリンク", "https://pay.paypay.ne.jp/...", True)
         ]
-        await interaction.response.send_modal(DynamicCustomerPayModal("スコア", 500, fields))
+        await interaction.response.send_modal(DynamicCustomerPayModal("スコア", 700, fields))
 
-    @discord.ui.button(label="⭐ プレイヤーレベル (¥500)", style=discord.ButtonStyle.primary, custom_id="shop_plevel_btn")
+    @discord.ui.button(label="⭐ プレイヤーレベル (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_plevel_btn")
     async def buy_plevel(self, interaction: discord.Interaction, button: discord.ui.Button):
         fields = [
             ("目標レベル", "例: 1200まで", False),
             ("PayPayリンク", "https://pay.paypay.ne.jp/...", True)
         ]
-        await interaction.response.send_modal(DynamicCustomerPayModal("プレイヤーレベル", 500, fields))
+        await interaction.response.send_modal(DynamicCustomerPayModal("プレイヤーレベル", 700, fields))
 
-    @discord.ui.button(label="🔥 ツムレベル (¥500)", style=discord.ButtonStyle.primary, custom_id="shop_tlevel_btn")
+    @discord.ui.button(label="🔥 ツムレベル (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_tlevel_btn")
     async def buy_tlevel(self, interaction: discord.Interaction, button: discord.ui.Button):
         fields = [
             ("対象ツム名", "例: ロマンスベル1つをレベル50", False),
             ("PayPayリンク", "https://pay.paypay.ne.jp/...", True)
         ]
-        await interaction.response.send_modal(DynamicCustomerPayModal("ツムレベル", 500, fields))
+        await interaction.response.send_modal(DynamicCustomerPayModal("ツムレベル", 700, fields))
 
-    @discord.ui.button(label="🎰 ガチャ (¥1,000)", style=discord.ButtonStyle.success, custom_id="shop_gacha_btn")
+    @discord.ui.button(label="🎰 ガチャ (¥1,200)", style=discord.ButtonStyle.success, custom_id="shop_gacha_btn")
     async def buy_gacha(self, interaction: discord.Interaction, button: discord.ui.Button):
         fields = [
             ("ガチャの種類と回数", "例: 好きなガチャをコイン分", False),
             ("PayPayリンク", "https://pay.paypay.ne.jp/...", True)
         ]
-        await interaction.response.send_modal(DynamicCustomerPayModal("ガチャ", 1000, fields))
+        await interaction.response.send_modal(DynamicCustomerPayModal("ガチャ", 1200, fields))
 
     @discord.ui.button(label="💎 高品質コイン (¥1,500〜)", style=discord.ButtonStyle.danger, custom_id="shop_hqcoin_btn")
     async def buy_hqcoin(self, interaction: discord.Interaction, button: discord.ui.Button):
