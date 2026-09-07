@@ -70,7 +70,7 @@ class AdminActionView(discord.ui.View):
         self.amount = amount
         self.details_text = details_text
 
-    @discord.ui.button(label="承認（支払い完了）", style=discord.ButtonStyle.success, custom_id="admin_approve_v9")
+    @discord.ui.button(label="承認（支払い完了）", style=discord.ButtonStyle.success, custom_id="admin_approve_v10")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
         save_history(self.customer_user.id, str(self.customer_user), self.item_name, self.amount, self.details_text)
 
@@ -92,7 +92,7 @@ class AdminActionView(discord.ui.View):
         status_text = "【処理完了・DM送信済】" if dm_success else "【処理完了・DM送信失敗（ユーザーのDM閉鎖）】"
         await interaction.response.edit_message(content=f"{status_text} {interaction.user.mention} が承認しました。", view=self)
 
-    @discord.ui.button(label="拒否（エラー）", style=discord.ButtonStyle.danger, custom_id="admin_reject_v9")
+    @discord.ui.button(label="拒否（エラー）", style=discord.ButtonStyle.danger, custom_id="admin_reject_v10")
     async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             embed = discord.Embed(
@@ -121,14 +121,14 @@ class OrderConfirmView(discord.ui.View):
         # 注文確定メッセージを自分だけに送信
         await interaction.response.edit_message(content="🎉 注文が正常に送信されました！管理者からの確認をお待ちください。", view=None)
 
-        # 管理者ログチャンネルへ通知
+        # 管理者ログチャンネルへ通知（コードブロックを外し、コピペしやすく直に表示）
         admin_channel = interaction.client.get_channel(ADMIN_LOG_CHANNEL_ID)
         if admin_channel:
             embed = discord.Embed(title="🚨 新しい購入申請が届きました！", color=0xFFD700)
             embed.add_field(name="購入者", value=interaction.user.mention, inline=False)
             embed.add_field(name="商品名", value=self.item_name, inline=True)
             embed.add_field(name="請求金額", value=f"{self.amount} 円", inline=True)
-            embed.add_field(name="📌 提出された詳細情報", value=f"```\n{self.details_text}\n```", inline=False)
+            embed.add_field(name="📌 提出された詳細情報", value=self.details_text, inline=False)
 
             view = AdminActionView(
                 customer_user=interaction.user,
@@ -165,16 +165,16 @@ class DynamicCustomerPayModal(discord.ui.Modal):
         details_list = []
         for label, input_item in self.inputs:
             val = input_item.value or "（未入力）"
-            details_list.append(f"{label}: {val}")
+            details_list.append(f"{label}:\n{val}")
 
-        full_details_str = "\n".join(details_list)
+        full_details_str = "\n\n".join(details_list)
 
-        # 画像1枚目のような確認画面を構築（ephemeralで自分だけに表示）
+        # 確認画面を構築（ephemeralで自分だけに表示）
         embed_confirm = discord.Embed(
             title="注文内容の確認",
             description=f"商品: {self.item_name}\n金額: {self.expected_amount}円\n\n" + \
-                        "\n".join([f"**{l}**: {i.value}" for l, i in self.inputs]) + \
-                        "\n\n内容を確認して「注文を確定」を押してください。\n※確定は1回のみ有効です。処理中は連打しないでください。",
+                        "\n".join([f"**{l}**:\n{i.value}" for l, i in self.inputs]) + \
+                        "\n\n内容を確認して「注文を確定」してください。\n※確定は1回のみ有効です。処理中は連打しないでください。",
             color=0x2B2D31
         )
 
@@ -195,12 +195,12 @@ class DynamicCustomerPayModal(discord.ui.Modal):
 
         await interaction.response.send_message(embeds=[embed_confirm, embed_warning], view=view, ephemeral=True)
 
-# --- 各商品ごとの購入ボタンを持つView（画像2枚目の再現） ---
+# --- 各商品ごとの購入ボタンを持つView（全商品200円値上げ版） ---
 class ShopMainView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="🪙 コイン購入 (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_coin_btn")
+    @discord.ui.button(label="🪙 コイン購入 (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_coin_btn_v2")
     async def buy_coin(self, interaction: discord.Interaction, button: discord.ui.Button):
         fields = [
             ("希望コイン数", "例: 1,000,000", False),
@@ -208,7 +208,7 @@ class ShopMainView(discord.ui.View):
         ]
         await interaction.response.send_modal(DynamicCustomerPayModal("コイン", 700, fields))
 
-    @discord.ui.button(label="🎯 スコア購入 (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_score_btn")
+    @discord.ui.button(label="🎯 スコア購入 (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_score_btn_v2")
     async def buy_score(self, interaction: discord.Interaction, button: discord.ui.Button):
         fields = [
             ("指定ツム・スコア", "例: バンビで1億点", False),
@@ -216,7 +216,7 @@ class ShopMainView(discord.ui.View):
         ]
         await interaction.response.send_modal(DynamicCustomerPayModal("スコア", 700, fields))
 
-    @discord.ui.button(label="⭐ プレイヤーレベル (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_plevel_btn")
+    @discord.ui.button(label="⭐ プレイヤーレベル (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_plevel_btn_v2")
     async def buy_plevel(self, interaction: discord.Interaction, button: discord.ui.Button):
         fields = [
             ("目標レベル", "例: 1200まで", False),
@@ -224,7 +224,7 @@ class ShopMainView(discord.ui.View):
         ]
         await interaction.response.send_modal(DynamicCustomerPayModal("プレイヤーレベル", 700, fields))
 
-    @discord.ui.button(label="🔥 ツムレベル (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_tlevel_btn")
+    @discord.ui.button(label="🔥 ツムレベル (¥700)", style=discord.ButtonStyle.primary, custom_id="shop_tlevel_btn_v2")
     async def buy_tlevel(self, interaction: discord.Interaction, button: discord.ui.Button):
         fields = [
             ("対象ツム名", "例: ロマンスベル1つをレベル50", False),
@@ -232,7 +232,7 @@ class ShopMainView(discord.ui.View):
         ]
         await interaction.response.send_modal(DynamicCustomerPayModal("ツムレベル", 700, fields))
 
-    @discord.ui.button(label="🎰 ガチャ (¥1,200)", style=discord.ButtonStyle.success, custom_id="shop_gacha_btn")
+    @discord.ui.button(label="🎰 ガチャ (¥1,200)", style=discord.ButtonStyle.success, custom_id="shop_gacha_btn_v2")
     async def buy_gacha(self, interaction: discord.Interaction, button: discord.ui.Button):
         fields = [
             ("ガチャの種類と回数", "例: 好きなガチャをコイン分", False),
@@ -240,13 +240,13 @@ class ShopMainView(discord.ui.View):
         ]
         await interaction.response.send_modal(DynamicCustomerPayModal("ガチャ", 1200, fields))
 
-    @discord.ui.button(label="💎 高品質コイン (¥1,500〜)", style=discord.ButtonStyle.danger, custom_id="shop_hqcoin_btn")
+    @discord.ui.button(label="💎 高品質コイン (¥1,700〜)", style=discord.ButtonStyle.danger, custom_id="shop_hqcoin_btn_v2")
     async def buy_hqcoin(self, interaction: discord.Interaction, button: discord.ui.Button):
         fields = [
             ("希望金額・詳細", "例: 指定ツムで回数分割コイン獲得", True),
             ("PayPayリンク", "https://pay.paypay.ne.jp/...", True)
         ]
-        await interaction.response.send_modal(DynamicCustomerPayModal("高品質コイン", 1500, fields))
+        await interaction.response.send_modal(DynamicCustomerPayModal("高品質コイン", 1700, fields))
 
 # --- Bot起動処理 ---
 @bot.event
@@ -261,7 +261,7 @@ async def on_ready():
         print(f"同期エラー: {e}")
 
 # --- コマンド ---
-@bot.tree.command(name="create_vending", description="【管理者専用】画像のような商品一覧パネルを設置します")
+@bot.tree.command(name="create_vending", description="【管理者専用】値上げ＆コピペ対応版のショップパネルを設置します")
 @app_commands.checks.has_permissions(administrator=True)
 async def create_vending(interaction: discord.Interaction):
     embed = discord.Embed(
@@ -269,19 +269,19 @@ async def create_vending(interaction: discord.Interaction):
         description="各メニューには注意事項がありますので、ご注文前にお読みください。",
         color=0x2B2D31
     )
-    # 画像2枚目のような詳細をフィールドで表現
-    embed.add_field(name="コイン ¥500", value="`0-2億コインまで指定可能`", inline=False)
-    embed.add_field(name="スコア ¥500", value="`指定ツムで指定スコアにする`", inline=False)
-    embed.add_field(name="プレイヤーレベル ¥500", value="`1200まで指定可能`", inline=False)
-    embed.add_field(name="ツムレベル ¥500", value="`指定ツム1つをレベル50まで上げる`", inline=False)
-    embed.add_field(name="ガチャ ¥1,000", value="`好きなガチャをコイン分引く +BOXは対象外`", inline=False)
-    embed.add_field(name="高品質コイン ¥1,500〜¥7,000", value="`指定ツムで回数分割コイン獲得（履歴に最大枚数のみ表示）`", inline=False)
+    # 値上げ後の価格を反映
+    embed.add_field(name="コイン ¥700", value="`0-2億コインまで指定可能`", inline=False)
+    embed.add_field(name="スコア ¥700", value="`指定ツムで指定スコアにする`", inline=False)
+    embed.add_field(name="プレイヤーレベル ¥700", value="`1200まで指定可能`", inline=False)
+    embed.add_field(name="ツムレベル ¥700", value="`指定ツム1つをレベル50まで上げる`", inline=False)
+    embed.add_field(name="ガチャ ¥1,200", value="`好きなガチャをコイン分引く +BOXは対象外`", inline=False)
+    embed.add_field(name="高品質コイン ¥1,700〜¥7,200", value="`指定ツムで回数分割コイン獲得（履歴に最大枚数のみ表示）`", inline=False)
     
     embed.set_footer(text="© 2026 GodMart All Rights Reserved.")
 
     view = ShopMainView()
     await interaction.channel.send(embed=embed, view=view)
-    await interaction.response.send_message("✅ 商品一覧パネルを設置しました！", ephemeral=True)
+    await interaction.response.send_message("✅ 値上げ＆コピペ対応版のパネルを設置しました！", ephemeral=True)
 
 @bot.tree.command(name="history", description="【管理者専用】取引履歴を確認します（自分だけに表示）")
 @app_commands.checks.has_permissions(administrator=True)
