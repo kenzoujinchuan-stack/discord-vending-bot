@@ -22,7 +22,7 @@ def keep_alive():
     t.daemon = True
     t.start()
 
-# === 設定値（直埋め済み） ===
+# === 設定値 ===
 TOKEN = os.getenv("TOKEN")
 ADMIN_LOG_CHANNEL_ID = 1500206540517540031  # 管理者用ログチャンネルのID
 GUILD_ID = 1500129771441492219              # 自分のDiscordサーバーID
@@ -70,7 +70,7 @@ class AdminActionView(discord.ui.View):
         self.amount = amount
         self.details_text = details_text
 
-    @discord.ui.button(label="承認（支払い完了）", style=discord.ButtonStyle.success, custom_id="admin_approve_v7")
+    @discord.ui.button(label="承認（支払い完了）", style=discord.ButtonStyle.success, custom_id="admin_approve_v8")
     async def approve(self, interaction: discord.Interaction, button: discord.ui.Button):
         save_history(self.customer_user.id, str(self.customer_user), self.item_name, self.amount, self.details_text)
 
@@ -92,7 +92,7 @@ class AdminActionView(discord.ui.View):
         status_text = "【処理完了・DM送信済】" if dm_success else "【処理完了・DM送信失敗（ユーザーのDM閉鎖）】"
         await interaction.response.edit_message(content=f"{status_text} {interaction.user.mention} が承認しました。", view=self)
 
-    @discord.ui.button(label="拒否（エラー）", style=discord.ButtonStyle.danger, custom_id="admin_reject_v7")
+    @discord.ui.button(label="拒否（エラー）", style=discord.ButtonStyle.danger, custom_id="admin_reject_v8")
     async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             embed = discord.Embed(
@@ -153,85 +153,50 @@ class DynamicCustomerPayModal(discord.ui.Modal):
             )
             await admin_channel.send(embed=embed, view=view)
 
-# --- 自販機パネルの購入ボタン ---
-class VendingPanelView(discord.ui.View):
-    def __init__(self, item_name: str, amount: int, field_settings: list):
-        super().__init__(timeout=None)
-        self.item_name = item_name
-        self.amount = amount
-        self.field_settings = field_settings
+# --- セレクトメニュー（プルダウン） ---
+class ServiceSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="コイン", description="¥500 - 0-2億コインまで指定可能", emoji="🪙"),
+            discord.SelectOption(label="スコア", description="¥500 - 指定ツムで指定スコアにする", emoji="🎯"),
+            discord.SelectOption(label="プレイヤーレベル", description="¥500 - 1200まで指定可能", emoji="⭐"),
+            discord.SelectOption(label="ツムレベル", description="¥500 - 指定ツム1つをレベル50まで上げる", emoji="🔥"),
+            discord.SelectOption(label="ガチャ", description="¥1,000 - 好きなガチャをコイン分引く", emoji="🎰"),
+        ]
+        super().__init__(placeholder="ご希望の代行メニューを選択してください", min_values=1, max_values=1, options=options)
 
-    @discord.ui.button(label="購入手続きへ進む", style=discord.ButtonStyle.success, emoji="💳", custom_id="vending_buy_btn_v7")
-    async def buy_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(DynamicCustomerPayModal(self.item_name, self.amount, self.field_settings))
-
-# --- 一括作成Modal ---
-class VendingSetupModal(discord.ui.Modal, title="🤖 自販機パネルの作成"):
-    title_and_price = discord.ui.TextInput(
-        label="商品名 | 価格(半角数字)",
-        placeholder="例: おいしいごはん | 100",
-        default="おいしいごはん | 100",
-        required=True
-    )
-    field1 = discord.ui.TextInput(
-        label="項目1 [名前 | 初期ヒント | 1=1行, 2=でかい枠]",
-        placeholder="例: PayPayリンク | https://pay.paypay.ne.jp/... | 1",
-        default="PayPayリンク | https://pay.paypay.ne.jp/... | 1",
-        required=True
-    )
-    field2 = discord.ui.TextInput(
-        label="項目2 (不要なら空欄)",
-        placeholder="例: ユーザーID | 例: user_12345 | 1",
-        required=False
-    )
-    field3 = discord.ui.TextInput(
-        label="項目3 (不要なら空欄)",
-        placeholder="例: パスワード | 例: pass_abc | 1",
-        required=False
-    )
-    field4 = discord.ui.TextInput(
-        label="項目4 (不要なら空欄)",
-        placeholder="例: 備考メモ | 何でも書いてね | 2",
-        required=False
-    )
-
-    async def on_submit(self, interaction: discord.Interaction):
-        try:
-            parts = [p.strip() for p in self.title_and_price.value.split("|")]
-            product_name = parts[0]
-            amt = int(parts[1])
-        except Exception:
-            await interaction.response.send_message("❌ 「商品名 | 価格」の形式で入力してください！（例: おいしいごはん | 100）", ephemeral=True)
-            return
-
-        field_inputs = [self.field1.value, self.field2.value, self.field3.value, self.field4.value]
-        field_settings = []
-
-        for raw_val in field_inputs:
-            if not raw_val or not raw_val.strip():
-                continue
-            f_parts = [p.strip() for p in raw_val.split("|")]
-            label = f_parts[0] if len(f_parts) > 0 and f_parts[0] else "項目"
-            placeholder = f_parts[1] if len(f_parts) > 1 else ""
-            is_large = (f_parts[2] == "2") if len(f_parts) > 2 else False
-            field_settings.append((label, placeholder, is_large))
-
-        if not field_settings:
-            await interaction.response.send_message("❌ 少なくても1つは項目を設定してください！", ephemeral=True)
-            return
-
-        embed = discord.Embed(
-            title=f"🛒 {product_name} 自販機",
-            color=0x00FFC8
-        )
-        embed.add_field(name="📦 商品名", value=product_name, inline=True)
-        embed.add_field(name="💰 価格", value=f"{amt} 円", inline=True)
-        embed.set_footer(text="「購入手続きへ進む」を押して必要情報を送信してください。")
-
-        view = VendingPanelView(item_name=product_name, amount=amt, field_settings=field_settings)
+    async def callback(self, interaction: discord.Interaction):
+        selected = self.values[0]
         
-        await interaction.channel.send(embed=embed, view=view)
-        await interaction.response.send_message("✅ カスタム自販機パネルを設置しました！", ephemeral=True)
+        # 選択されたメニューに応じて商品名・金額・入力欄を設定
+        if selected == "コイン":
+            item_name = "コイン代行"
+            amount = 500
+            fields = [("指定コイン数・PayPayリンク", "例: 1億コイン / https://...", True)]
+        elif selected == "スコア":
+            item_name = "スコア代行"
+            amount = 500
+            fields = [("指定ツム・スコア・リンク", "例: バンビで1億点 / https://...", True)]
+        elif selected == "プレイヤーレベル":
+            item_name = "プレイヤーレベル代行"
+            amount = 500
+            fields = [("目標レベル・リンク", "例: レベル1200 / https://...", True)]
+        elif selected == "ツムレベル":
+            item_name = "ツムレベル代行"
+            amount = 500
+            fields = [("対象ツム名・リンク", "例: ロマンスベルLv50 / https://...", True)]
+        else:
+            item_name = "ガチャ代行"
+            amount = 1000
+            fields = [("ガチャの種類・回数・リンク", "例: セレクト30連 / https://...", True)]
+
+        await interaction.response.send_modal(DynamicCustomerPayModal(item_name, amount, fields))
+
+# --- セレクトメニューを保持するView ---
+class ServiceSelectView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(ServiceSelect())
 
 # --- Bot起動処理 ---
 @bot.event
@@ -246,10 +211,19 @@ async def on_ready():
         print(f"同期エラー: {e}")
 
 # --- コマンド ---
-@bot.tree.command(name="create_vending", description="【管理者専用】UIフォームを開いて自販機パネルを作成します")
+@bot.tree.command(name="create_vending", description="【管理者専用】セレクトメニュー付きの代行ショップパネルを設置します")
 @app_commands.checks.has_permissions(administrator=True)
 async def create_vending(interaction: discord.Interaction):
-    await interaction.response.send_modal(VendingSetupModal())
+    embed = discord.Embed(
+        title="✨ ツムツム自動代行サービス ✨",
+        description="各メニューには注意事項がありますので、ご注文前にご確認ください。\n下のメニューからご希望の代行内容を選択してください。",
+        color=0x00FFC8
+    )
+    embed.set_footer(text="© 2026 GodMart All Rights Reserved.")
+
+    view = ServiceSelectView()
+    await interaction.channel.send(embed=embed, view=view)
+    await interaction.response.send_message("✅ セレクトメニュー付きの代行パネルを設置しました！", ephemeral=True)
 
 @bot.tree.command(name="history", description="【管理者専用】取引履歴を確認します（自分だけに表示）")
 @app_commands.checks.has_permissions(administrator=True)
