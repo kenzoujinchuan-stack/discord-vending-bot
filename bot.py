@@ -258,7 +258,7 @@ async def on_ready():
         print(f"同期エラー: {e}")
 
 # --- コマンド（自動で綺麗にパネルを設置する本来の仕様） ---
-@bot.tree.command(name="SHOPenter", description="【管理者専用】ツムツム自動代行のショップパネルを設置します")
+@bot.tree.command(name="shop_enter", description="【管理者専用】ツムツム自動代行のショップパネルを設置します")
 @app_commands.checks.has_permissions(administrator=True)
 async def create_vending(interaction: discord.Interaction):
     embed = discord.Embed(
