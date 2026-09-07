@@ -28,9 +28,9 @@ ADMIN_LOG_CHANNEL_ID = 1500206540517540031  # 管理者用ログチャンネル�
 GUILD_ID = 1500129771441492219              # 自分のDiscordサーバーID
 
 # 各種IDの設定（ここを自分のサーバーの実際のIDに書き換えてね！）
-ADMIN_USER_ID = 123456789012345678         # あなた（管理人）のユーザーID
-REVIEW_CHANNEL_ID = 123456789012345678     # 実績を流すチャンネルのID
-ROLE_ID = 123456789012345678               # 実績入力時に付与するロールのID
+ADMIN_USER_ID = 1233691331214446605         # あなた（管理人）のユーザーID
+REVIEW_CHANNEL_ID = 1546490480315859025    # 実績を流すチャンネルのID
+ROLE_ID = 1546494120816541796            # 実績入力時に付与するロールのID
 
 intents = discord.Intents.default()
 intents.message_content = True
