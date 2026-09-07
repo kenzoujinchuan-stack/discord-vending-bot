@@ -96,7 +96,7 @@ class AdminActionView(discord.ui.View):
     async def reject(self, interaction: discord.Interaction, button: discord.ui.Button):
         try:
             embed = discord.Embed(
-                title="❌ 支払いを処理できませんでした",
+                title="❌ 支払いを処理できませんでした.",
                 description=f"**商品名**: {self.item_name}\n送信された情報が無効か、金額が一致しませんでした。確認の上、再度お試しください。",
                 color=0xFF0000
             )
