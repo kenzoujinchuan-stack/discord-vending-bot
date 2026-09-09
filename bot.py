@@ -32,11 +32,27 @@ GUILD_ID = 1500129771441492219              # 自分のDiscordサーバーID
 ADMIN_USER_ID = 1233691331214446605         # あなた（管理人）のユーザーID
 REVIEW_CHANNEL_ID = 1546490480315859025    # 実績を流すチャンネルのID
 ROLE_ID = 1546494120816541796              # 実績入力時に付与するロールのID
-REPEATER_ROLE_ID = 1547134069714845767     # 【新規】リピーターロールのID
+REPEATER_ROLE_ID = 1547134069714845767     # リピーターロールのID
 
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+
+# --- 【超重要】カスタムCommandTreeの定義 ---
+# ここでスラッシュコマンド全体の「検問所」を作って、管理人以外の実行をシャットアウトするぜ！
+class AdminOnlyTree(app_commands.CommandTree):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # 管理人（ADMIN_USER_ID）以外からのコマンド実行はすべてブロック！
+        if interaction.user.id != ADMIN_USER_ID:
+            msg = "❌ 権限がありません！こちらのコマンドは管理者専用となっております。"
+            if not interaction.response.is_done():
+                await interaction.response.send_message(msg, ephemeral=True)
+            else:
+                await interaction.followup.send(msg, ephemeral=True)
+            return False
+        return True
+
+# ボットの初期化時に、作ったばかりのカスタムツリー（AdminOnlyTree）を装備させる！
+bot = commands.Bot(command_prefix="!", intents=intents, tree_cls=AdminOnlyTree)
 
 # --- DB初期化 ---
 def init_db():
@@ -66,7 +82,6 @@ def save_history(user_id: int, user_name: str, item_name: str, amount: int, deta
         VALUES (?, ?, ?, ?, ?, ?)
     ''', (user_id, user_name, item_name, amount, details, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
     
-    # 該当ユーザーのこれまでの取引回数をカウント
     cursor.execute("SELECT COUNT(*) FROM history WHERE user_id = ?", (user_id,))
     count = cursor.fetchone()[0]
     
@@ -192,7 +207,6 @@ class OrderModal(discord.ui.Modal):
         details_list = [f"{label}: {input_item.value}" for label, input_item in self.inputs]
         full_details_str = "\n".join(details_list)
         
-        # 履歴保存と同時に取引回数を取得
         trade_count = save_history(interaction.user.id, str(interaction.user), self.item_name, self.expected_amount, full_details_str)
 
         await interaction.followup.send(f"✅ 専用の個室を作成いたしました！ 👉 {ticket_channel.mention}", ephemeral=True)
@@ -214,7 +228,7 @@ class OrderModal(discord.ui.Modal):
         view = InitialLoginView(buyer_id=interaction.user.id)
         await ticket_channel.send(content=f"{interaction.user.mention} 様、専用取引ルームへようこそ！", embed=embed, view=view)
 
-        # 【リピーターロール付与ロジック】取引回数が2回以上の場合
+        # 2回目以上の購入でリピーターロールを自動付与
         if trade_count >= 2:
             repeater_role = guild.get_role(REPEATER_ROLE_ID)
             if repeater_role:
@@ -315,7 +329,6 @@ class TicketRoomView(discord.ui.View):
         await interaction.response.send_message("✅ 作業完了メッセージを送信いたしました！", ephemeral=True)
 
 
-# 5. PIN入力要請時のボタンビュー【修正：誰でも押せるように制限を撤廃】
 class PinEntryView(discord.ui.View):
     def __init__(self, buyer_id: int):
         super().__init__(timeout=None)
@@ -323,7 +336,6 @@ class PinEntryView(discord.ui.View):
 
     @discord.ui.button(label="📌 PINを入力しました", style=discord.ButtonStyle.success, custom_id="ticket_pin_submitted")
     async def pin_submitted(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # ※ プライベートチャンネルでの作業者（あなた）やアカウント所有者が誰でも押せるように本人チェックを解除！
         embed = discord.Embed(
             title="❓ 確認",
             description=(
@@ -336,7 +348,6 @@ class PinEntryView(discord.ui.View):
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-# 6. PIN入力確認（はい／いいえ）のビュー【修正：こちらも誰でも確認できるように制限を解除】
 class PinConfirmYesNoView(discord.ui.View):
     def __init__(self, buyer_id: int):
         super().__init__(timeout=None)
@@ -500,27 +511,6 @@ class ShopMainView(discord.ui.View):
         await interaction.response.send_modal(OrderModal("高品質コイン", 1700, fields))
 
 
-# --- 【新規】管理人以外のスラッシュコマンド実行ブロック用グローバルチェック ---
-@bot.tree.check
-async def global_admin_check(interaction: discord.Interaction):
-    # 管理人（ADMIN_USER_ID）以外からのコマンド実行はすべてブロック！
-    if interaction.user.id != ADMIN_USER_ID:
-        raise app_commands.CheckFailure("Not authorized admin")
-    return True
-
-# エラーハンドラー：権限がない人がコマンドを叩いた時に「権限がありません」と優しく（冷酷に）返す
-@bot.tree.error
-async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
-    if isinstance(error, app_commands.CheckFailure):
-        msg = "❌ 権限がありません！こちらのコマンドは管理者専用となっております。"
-        if not interaction.response.is_done():
-            await interaction.response.send_message(msg, ephemeral=True)
-        else:
-            await interaction.followup.send(msg, ephemeral=True)
-    else:
-        print(f"予期せぬコマンドエラーが発生しました: {error}")
-
-
 # --- Bot起動処理 ---
 @bot.event
 async def on_ready():
@@ -541,10 +531,10 @@ async def on_ready():
 
 
 # ==========================================
-# コマンド群（すべてADMIN_USER_ID以外の実行は上で弾かれます）
+# コマンド群（AdminOnlyTreeのcheckにより、管理人以外は自動ではじかれます）
 # ==========================================
 
-@bot.tree.command(name="shop_enter", description="【管理者専用】ツムツml自動代行のショップパネルを設置します")
+@bot.tree.command(name="shop_enter", description="【管理者専用】ツムツム自動代行のショップパネルを設置します")
 async def create_vending(interaction: discord.Interaction):
     embed = discord.Embed(
         title="ツムツム自動代行サービス",
@@ -644,7 +634,7 @@ async def history(interaction: discord.Interaction, user: discord.User = None):
             inline=False
         )
 
-    Tuple_res = await interaction.response.send_message(embed=embed, ephemeral=True)
+    await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # === Webサーバーをバックグラウンド起動してからBotを開始！ ===
 keep_alive()
