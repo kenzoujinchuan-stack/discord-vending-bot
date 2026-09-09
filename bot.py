@@ -32,6 +32,7 @@ GUILD_ID = 1500129771441492219              # 自分のDiscordサーバーID
 ADMIN_USER_ID = 1233691331214446605         # あなた（管理人）のユーザーID
 REVIEW_CHANNEL_ID = 1546490480315859025    # 実績を流すチャンネルのID
 ROLE_ID = 1546494120816541796              # 実績入力時に付与するロールのID
+REPEATER_ROLE_ID = 1547134069714845767     # 【新規】リピーターロールのID
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -64,15 +65,20 @@ def save_history(user_id: int, user_name: str, item_name: str, amount: int, deta
         INSERT INTO history (user_id, user_name, item_name, amount, paypay_link, processed_at)
         VALUES (?, ?, ?, ?, ?, ?)
     ''', (user_id, user_name, item_name, amount, details, datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+    
+    # 該当ユーザーのこれまでの取引回数をカウント
+    cursor.execute("SELECT COUNT(*) FROM history WHERE user_id = ?", (user_id,))
+    count = cursor.fetchone()[0]
+    
     conn.commit()
     conn.close()
+    return count
 
 
 # ==========================================
 # 🎫 新・お問い合わせ用システム（プライベートチャンネル型）
 # ==========================================
 
-# 最初にお問い合わせパネルに付いてるボタン（ユーザー用）
 class InquiryMainView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -82,7 +88,6 @@ class InquiryMainView(discord.ui.View):
         await interaction.response.defer(ephemeral=True)
         guild = interaction.guild
         
-        # 権限の設定：@everyoneは見れない、本人とBot、管理人が見れる
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(read_messages=False),
             interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
@@ -121,7 +126,6 @@ class InquiryMainView(discord.ui.View):
         await interaction.followup.send(f"✅ お問い合わせ専用の個室を作成いたしました！ 👉 {inquiry_channel.mention}", ephemeral=True)
 
 
-# お問い合わせチャンネル内の終了ボタン
 class InquiryCloseView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -137,10 +141,9 @@ class InquiryCloseView(discord.ui.View):
 
 
 # ==========================================
-# 🎫 チケット＆個室システムのビュー・モーダル群（既存のやつ・敬語化完了）
+# 🎫 チケット＆個室システムのビュー・モーダル群
 # ==========================================
 
-# 1. 注文時の情報入力用モーダル
 class OrderModal(discord.ui.Modal):
     def __init__(self, item_name: str, expected_amount: int, field_settings: list):
         super().__init__(title=f"{item_name} のご注文フォーム")
@@ -188,7 +191,9 @@ class OrderModal(discord.ui.Modal):
         
         details_list = [f"{label}: {input_item.value}" for label, input_item in self.inputs]
         full_details_str = "\n".join(details_list)
-        save_history(interaction.user.id, str(interaction.user), self.item_name, self.expected_amount, full_details_str)
+        
+        # 履歴保存と同時に取引回数を取得
+        trade_count = save_history(interaction.user.id, str(interaction.user), self.item_name, self.expected_amount, full_details_str)
 
         await interaction.followup.send(f"✅ 専用の個室を作成いたしました！ 👉 {ticket_channel.mention}", ephemeral=True)
         
@@ -209,8 +214,19 @@ class OrderModal(discord.ui.Modal):
         view = InitialLoginView(buyer_id=interaction.user.id)
         await ticket_channel.send(content=f"{interaction.user.mention} 様、専用取引ルームへようこそ！", embed=embed, view=view)
 
+        # 【リピーターロール付与ロジック】取引回数が2回以上の場合
+        if trade_count >= 2:
+            repeater_role = guild.get_role(REPEATER_ROLE_ID)
+            if repeater_role:
+                try:
+                    member = guild.get_member(interaction.user.id)
+                    if member and repeater_role not in member.roles:
+                        await member.add_roles(repeater_role)
+                        await ticket_channel.send(f"🎉 おおっと！ {interaction.user.mention} 様は今回で**2回目のご購入**となりますので、専用の【リピーター】ロールを自動付与いたしました！✨ いつもありがとうございます！")
+                except Exception as e:
+                    print(f"リピーターロール付与エラー: {e}")
 
-# 2. 初期画面のボタン
+
 class InitialLoginView(discord.ui.View):
     def __init__(self, buyer_id: int):
         super().__init__(timeout=None)
@@ -225,7 +241,6 @@ class InitialLoginView(discord.ui.View):
         await interaction.response.send_modal(LoginModal(buyer_id=self.buyer_id))
 
 
-# 3. LINEログイン情報入力用モーダル
 class LoginModal(discord.ui.Modal, title="LINE ログイン情報入力"):
     line_email = discord.ui.TextInput(
         label="LINEメールアドレス",
@@ -263,7 +278,6 @@ class LoginModal(discord.ui.Modal, title="LINE ログイン情報入力"):
         await interaction.channel.send(content=f"{interaction.user.mention} お手続き完了でございます！", embed=embed, view=view)
 
 
-# 4. ログイン情報入力後のボタン2個
 class TicketRoomView(discord.ui.View):
     def __init__(self, buyer_id: int):
         super().__init__(timeout=None)
@@ -301,7 +315,7 @@ class TicketRoomView(discord.ui.View):
         await interaction.response.send_message("✅ 作業完了メッセージを送信いたしました！", ephemeral=True)
 
 
-# 5. PIN入力要請時のボタンビュー
+# 5. PIN入力要請時のボタンビュー【修正：誰でも押せるように制限を撤廃】
 class PinEntryView(discord.ui.View):
     def __init__(self, buyer_id: int):
         super().__init__(timeout=None)
@@ -309,10 +323,7 @@ class PinEntryView(discord.ui.View):
 
     @discord.ui.button(label="📌 PINを入力しました", style=discord.ButtonStyle.success, custom_id="ticket_pin_submitted")
     async def pin_submitted(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if interaction.user.id != self.buyer_id:
-            await interaction.response.send_message("❌ ご購入者ご本人様のみ操作可能となっております！", ephemeral=True)
-            return
-
+        # ※ プライベートチャンネルでの作業者（あなた）やアカウント所有者が誰でも押せるように本人チェックを解除！
         embed = discord.Embed(
             title="❓ 確認",
             description=(
@@ -325,7 +336,7 @@ class PinEntryView(discord.ui.View):
         await interaction.response.send_message(embed=embed, view=view, ephemeral=True)
 
 
-# 6. PIN入力確認（はい／いいえ）のビュー
+# 6. PIN入力確認（はい／いいえ）のビュー【修正：こちらも誰でも確認できるように制限を解除】
 class PinConfirmYesNoView(discord.ui.View):
     def __init__(self, buyer_id: int):
         super().__init__(timeout=None)
@@ -347,7 +358,6 @@ class PinConfirmYesNoView(discord.ui.View):
         await interaction.response.edit_message(content="↩️ キャンセルいたしました。LINE側でPINコードをご入力後、再度ボタンを押してください！", embed=None, view=None)
 
 
-# 7. 取引完了後のボタン
 class AfterTradeView(discord.ui.View):
     def __init__(self, buyer_id: int):
         super().__init__(timeout=None)
@@ -373,7 +383,6 @@ class AfterTradeView(discord.ui.View):
         await interaction.channel.delete()
 
 
-# 8. 感想入力用のモーダル
 class ReviewModal(discord.ui.Modal, title="お取引の感想・実績入力"):
     review_text = discord.ui.TextInput(
         label="ご感想・レビュー",
@@ -420,7 +429,6 @@ class ReviewModal(discord.ui.Modal, title="お取引の感想・実績入力"):
         await interaction.followup.send("✅ 実績を送信し、ロールを付与いたしました！ご協力誠にありがとうございます！", ephemeral=True)
 
 
-# 9. 誰でも押せる最終削除ボタン
 class FinalCloseView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
@@ -492,6 +500,27 @@ class ShopMainView(discord.ui.View):
         await interaction.response.send_modal(OrderModal("高品質コイン", 1700, fields))
 
 
+# --- 【新規】管理人以外のスラッシュコマンド実行ブロック用グローバルチェック ---
+@bot.tree.check
+async def global_admin_check(interaction: discord.Interaction):
+    # 管理人（ADMIN_USER_ID）以外からのコマンド実行はすべてブロック！
+    if interaction.user.id != ADMIN_USER_ID:
+        raise app_commands.CheckFailure("Not authorized admin")
+    return True
+
+# エラーハンドラー：権限がない人がコマンドを叩いた時に「権限がありません」と優しく（冷酷に）返す
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CheckFailure):
+        msg = "❌ 権限がありません！こちらのコマンドは管理者専用となっております。"
+        if not interaction.response.is_done():
+            await interaction.response.send_message(msg, ephemeral=True)
+        else:
+            await interaction.followup.send(msg, ephemeral=True)
+    else:
+        print(f"予期せぬコマンドエラーが発生しました: {error}")
+
+
 # --- Bot起動処理 ---
 @bot.event
 async def on_ready():
@@ -500,7 +529,7 @@ async def on_ready():
     bot.add_view(ShopMainView())
     bot.add_view(FinalCloseView())
     bot.add_view(InquiryMainView())
-    bot.add_view(InquiryCloseView()) # 忘れずに登録！
+    bot.add_view(InquiryCloseView())
     
     try:
         guild = discord.Object(id=GUILD_ID)
@@ -512,12 +541,10 @@ async def on_ready():
 
 
 # ==========================================
-# コマンド群
+# コマンド群（すべてADMIN_USER_ID以外の実行は上で弾かれます）
 # ==========================================
 
-# --- 既存コマンド：ショップパネル設置 ---
-@bot.tree.command(name="shop_enter", description="【管理者専用】ツムツム自動代行のショップパネルを設置します")
-@app_commands.checks.has_permissions(administrator=True)
+@bot.tree.command(name="shop_enter", description="【管理者専用】ツムツml自動代行のショップパネルを設置します")
 async def create_vending(interaction: discord.Interaction):
     embed = discord.Embed(
         title="ツムツム自動代行サービス",
@@ -538,9 +565,7 @@ async def create_vending(interaction: discord.Interaction):
     await interaction.response.send_message("✅ ショップパネルを設置いたしました！", ephemeral=True)
 
 
-# --- 新規コマンド：お問い合わせパネル設置 ---
 @bot.tree.command(name="inquiry_enter", description="【管理者専用】お問い合わせ用のチケットパネルを設置します")
-@app_commands.checks.has_permissions(administrator=True)
 async def create_inquiry(interaction: discord.Interaction):
     embed = discord.Embed(
         title="カテゴリー：お問い合わせ",
@@ -552,9 +577,7 @@ async def create_inquiry(interaction: discord.Interaction):
     await interaction.response.send_message("✅ お問い合わせパネルを設置いたしました！", ephemeral=True)
 
 
-# --- コマンド：処理中テキスト ---
 @bot.tree.command(name="processing", description="【管理者専用】作業開始（処理中）の案内を投稿します")
-@app_commands.checks.has_permissions(administrator=True)
 async def processing_cmd(interaction: discord.Interaction):
     embed = discord.Embed(
         title="**対応を開始いたしました。**",
@@ -565,10 +588,8 @@ async def processing_cmd(interaction: discord.Interaction):
     await interaction.response.send_message("✅ 処理中テキストを出力いたしました！", ephemeral=True)
 
 
-# --- コマンド：PINコード入力要請 ---
 @bot.tree.command(name="pin_entry", description="【管理者専用】お客さんに4桁のPINコード入力を要請します")
 @app_commands.describe(pin="4桁のPINコード")
-@app_commands.checks.has_permissions(administrator=True)
 async def pin_entry_cmd(interaction: discord.Interaction, pin: str):
     buyer_id = None
     if interaction.channel.topic and "購入者: " in interaction.channel.topic:
@@ -595,9 +616,7 @@ async def pin_entry_cmd(interaction: discord.Interaction, pin: str):
     await interaction.response.send_message("✅ PINコード入力要請を投稿いたしました！", ephemeral=True)
 
 
-# --- コマンド：履歴確認 ---
 @bot.tree.command(name="history", description="【管理者専用】取引履歴を確認します（自分だけに表示）")
-@app_commands.checks.has_permissions(administrator=True)
 async def history(interaction: discord.Interaction, user: discord.User = None):
     conn = sqlite3.connect("vending_history.db")
     cursor = conn.cursor()
@@ -625,7 +644,7 @@ async def history(interaction: discord.Interaction, user: discord.User = None):
             inline=False
         )
 
-    await interaction.response.send_message(embed=embed, ephemeral=True)
+    Tuple_res = await interaction.response.send_message(embed=embed, ephemeral=True)
 
 # === Webサーバーをバックグラウンド起動してからBotを開始！ ===
 keep_alive()
