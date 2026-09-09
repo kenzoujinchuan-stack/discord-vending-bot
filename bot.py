@@ -30,7 +30,10 @@ GUILD_ID = 1500129771441492219              # 自分のDiscordサーバーID
 # 各種IDの設定
 ADMIN_USER_ID = 1233691331214446605         # あなた（管理人）のユーザーID
 REVIEW_CHANNEL_ID = 1546490480315859025    # 実績を流すチャンネルのID
-ROLE_ID = 1546494120816541796             # 実績入力時に付与するロールのID
+ROLE_ID = 1546494120816541796              # 実績入力時に付与するロールのID
+
+# 👇 【追加】お問い合わせを受け取る管理者用チャンネルのIDを指定してね！
+INQUIRY_CHANNEL_ID = 1547123631430176828   # とりあえずログチャンネルと同じにしてるけど変えてOK！
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -68,7 +71,147 @@ def save_history(user_id: int, user_name: str, item_name: str, amount: int, deta
 
 
 # ==========================================
-# 🎫 チケット＆個室システムのビュー・モーダル群
+# 🎫 お問い合わせ用システム（ここからドカンと追加！）
+# ==========================================
+
+# 1. ユーザーが入力するお問い合わせモーダル
+class InquiryModal(discord.ui.Modal, title="お問い合わせフォーム"):
+    inquiry_content = discord.ui.TextInput(
+        label="お問い合わせ内容",
+        placeholder="ここに質問や問題を詳しく書いてね！",
+        style=discord.TextStyle.paragraph,
+        required=True,
+        max_length=1000
+    )
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        user = interaction.user
+        content = self.inquiry_content.value
+
+        # ① ユーザーのDMに控えを送信（DMブロックされてるかもなのでtry-except）
+        dm_success = True
+        try:
+            dm_embed = discord.Embed(
+                title="✅ お問い合わせ完了しました！",
+                description="以下の内容で管理者にお問い合わせを送信したぜ！返信をお待ちくだせえ！",
+                color=0x2ECC71
+            )
+            dm_embed.add_field(name="送信内容", value=content)
+            await user.send(embed=dm_embed)
+        except discord.Forbidden:
+            dm_success = False # DMブロックされてる奴おるな！
+
+        # ② 管理者用チャンネルに送信（赤色🔴で「未返信」をアピール）
+        inquiry_channel = interaction.guild.get_channel(INQUIRY_CHANNEL_ID)
+        if inquiry_channel:
+            admin_embed = discord.Embed(
+                title="🔴 【未返信】新規お問い合わせ",
+                description=f"**送信者:** {user.mention} (`{user.id}`)\n\n**【内容】**\n{content}",
+                color=0xE74C3C # 赤色！
+            )
+            # ViewにユーザーIDを仕込んで、あとで誰に返信するか分かるようにする
+            view = AdminReplyView(target_user_id=user.id, original_content=content)
+            await inquiry_channel.send(embed=admin_embed, view=view)
+
+        # ユーザーへの最終レスポンス
+        msg = "✅ お問い合わせを送信しました！DMに控えを送ったよ！"
+        if not dm_success:
+            msg = "✅ お問い合わせを送信したよ！（※DMが設定でブロックされてるみたいだから控えは送れなかったぜ！BotからのDMをオンにしといてな！）"
+        await interaction.followup.send(msg, ephemeral=True)
+
+
+# 2. 最初にお問い合わせパネルに付いてるボタン（ユーザー用）
+class InquiryMainView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+
+    @discord.ui.button(label="🎫 チケット発行（お問い合わせ）", style=discord.ButtonStyle.primary, custom_id="inquiry_open_btn")
+    async def open_inquiry(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # ボタン押したらモーダルをドーン！
+        await interaction.response.send_modal(InquiryModal())
+
+
+# 3. 管理者が返信するためのモーダル
+class AdminReplyModal(discord.ui.Modal):
+    reply_content = discord.ui.TextInput(
+        label="返信内容",
+        placeholder="ここにユーザーへの返信を入力してね！",
+        style=discord.TextStyle.paragraph,
+        required=True
+    )
+
+    def __init__(self, target_user_id: int, original_content: str, message_to_edit: discord.Message):
+        super().__init__(title="お問い合わせへの返信")
+        self.target_user_id = target_user_id
+        self.original_content = original_content
+        self.message_to_edit = message_to_edit # 後で色を変えるために元のメッセージを保持
+
+    async def on_submit(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        
+        guild = interaction.guild
+        target_member = guild.get_member(self.target_user_id)
+        reply_text = self.reply_content.value
+
+        if not target_member:
+            await interaction.followup.send("❌ ユーザーがサーバーから抜けちゃったか、見つからないぜ…", ephemeral=True)
+            return
+
+        # ① ユーザーのDMに返信を送信
+        try:
+            dm_embed = discord.Embed(
+                title="📩 管理者からのお問い合わせ返信",
+                color=0x3498DB
+            )
+            dm_embed.add_field(name="あなたのお問い合わせ", value=self.original_content, inline=False)
+            dm_embed.add_field(name="管理者からの回答", value=reply_text, inline=False)
+            await target_member.send(embed=dm_embed)
+        except discord.Forbidden:
+            await interaction.followup.send("❌ ユーザーがDMをブロックしてるから返信が送れなかったぜ！サーバーでメンションして呼ぶしかないかも！", ephemeral=True)
+            return
+
+        # ② 管理者チャンネルのメッセージを緑色🟢（対応完了）に更新
+        updated_embed = discord.Embed(
+            title="🟢 【返信済み】お問い合わせ",
+            description=f"**送信者:** {target_member.mention} (`{self.target_user_id}`)\n\n**【内容】**\n{self.original_content}\n\n**【あなたの返信】**\n{reply_text}",
+            color=0x2ECC71 # 緑色！
+        )
+        updated_embed.set_footer(text=f"対応者: {interaction.user.name}")
+        
+        # ボタンを無効化（もう返信済みにする）
+        for item in self.message_to_edit.components[0].children:
+            item.disabled = True
+            
+        await self.message_to_edit.edit(embed=updated_embed, view=discord.ui.View.from_message(self.message_to_edit))
+        await interaction.followup.send("✅ ユーザーに返信を送信し、ステータスを更新したぜ！お疲れ！", ephemeral=True)
+
+
+# 4. 管理者チャンネルの「返信」ボタン（ボス用）
+class AdminReplyView(discord.ui.View):
+    def __init__(self, target_user_id: int, original_content: str):
+        super().__init__(timeout=None)
+        self.target_user_id = target_user_id
+        self.original_content = original_content
+
+    @discord.ui.button(label="✍️ 返信する", style=discord.ButtonStyle.success, custom_id="admin_reply_btn")
+    async def reply_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # 権限チェック（一応ボスか管理者しか押せないようにしとく）
+        if interaction.user.id != ADMIN_USER_ID and not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("❌ お前には触れないボタンだぜ！", ephemeral=True)
+            return
+        
+        # モーダルを開く。引数に「元のメッセージ」を渡して、あとで色を変えられるようにする
+        await interaction.response.send_modal(
+            AdminReplyModal(
+                target_user_id=self.target_user_id, 
+                original_content=self.original_content, 
+                message_to_edit=interaction.message
+            )
+        )
+
+# ==========================================
+# 🎫 チケット＆個室システムのビュー・モーダル群（既存のやつ）
 # ==========================================
 
 # 1. 注文時の情報入力用モーダル（商品名・PayPayリンク等）
@@ -439,8 +582,11 @@ class ShopMainView(discord.ui.View):
 async def on_ready():
     print(f"Logged in as {bot.user.name}!")
     
+    # 既存のViewを登録
     bot.add_view(ShopMainView())
     bot.add_view(FinalCloseView())
+    # 👇【追加】お問い合わせ用のViewもBot再起動時に動くように登録しとくぜ！
+    bot.add_view(InquiryMainView())
     
     try:
         guild = discord.Object(id=GUILD_ID)
@@ -450,7 +596,11 @@ async def on_ready():
     except Exception as e:
         print(f"同期エラー: {e}")
 
-# --- コマンド（ショップパネル設置） ---
+# ==========================================
+# コマンド群
+# ==========================================
+
+# --- 既存コマンド：ショップパネル設置 ---
 @bot.tree.command(name="shop_enter", description="【管理者専用】ツムツム自動代行のショップパネルを設置します")
 @app_commands.checks.has_permissions(administrator=True)
 async def create_vending(interaction: discord.Interaction):
@@ -471,6 +621,20 @@ async def create_vending(interaction: discord.Interaction):
     view = ShopMainView()
     await interaction.channel.send(embed=embed, view=view)
     await interaction.response.send_message("✅ ショップパネルを設置しました！", ephemeral=True)
+
+
+# 👇【追加コマンド】お問い合わせパネル設置
+@bot.tree.command(name="inquiry_enter", description="【管理者専用】お問い合わせ用のチケットパネルを設置します")
+@app_commands.checks.has_permissions(administrator=True)
+async def create_inquiry(interaction: discord.Interaction):
+    embed = discord.Embed(
+        title="カテゴリー：お問い合わせ",
+        description="下のボタンを押すことで、管理者へ直接お問い合わせができます！\nご不明な点や問題があればお気軽にどうぞ！",
+        color=0x9B59B6
+    )
+    view = InquiryMainView()
+    await interaction.channel.send(embed=embed, view=view)
+    await interaction.response.send_message("✅ お問い合わせパネルをバッチリ設置したぜ！", ephemeral=True)
 
 
 # --- 管理者専用新規コマンド1：/processing (処理中テキスト) ---
